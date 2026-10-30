@@ -1,0 +1,150 @@
+openapi: 3.0.3
+info:
+  title: Plata Currency Rates API
+  description: |
+    Асинхронный сервис котировок валют. Обновление котировки выполняется
+    в фоне: POST создаёт задание, статус и результат доступны по его id.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/v1/rates/updates:
+    post:
+      summary: Запросить обновление котировки
+      description: |
+        Идемпотентно: пока по паре есть незавершённое обновление,
+        возвращается его же идентификатор.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUpdateRequest'
+            example: {"pair": "EUR/MXN"}
+      responses:
+        '202':
+          description: Задание создано (или возвращено существующее)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateUpdate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/rates/updates/{id}:
+    get:
+      summary: Получить котировку по идентификатору обновления
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Текущее состояние задания; price/updated_at заполнены после завершения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateUpdate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/v1/rates/latest:
+    get:
+      summary: Последнее значение котировки по паре
+      parameters:
+        - name: pair
+          in: query
+          required: true
+          description: 'Валютная пара в формате BASE/QUOTE'
+          schema:
+            type: string
+            example: EUR/MXN
+      responses:
+        '200':
+          description: Последнее успешное значение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LatestRate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+components:
+  responses:
+    BadRequest:
+      description: Некорректный запрос (формат пары, JSON)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Задание или котировка не найдены
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Internal:
+      description: Внутренняя ошибка
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    CreateUpdateRequest:
+      type: object
+      required: [pair]
+      properties:
+        pair:
+          type: string
+          description: 'Валютная пара BASE/QUOTE (ISO-коды по 3 буквы)'
+          example: EUR/MXN
+    RateUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pair:
+          type: string
+          example: EUR/MXN
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        price:
+          type: number
+          nullable: true
+          description: Значение курса; null до завершения
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время получения котировки; null до завершения
+        error:
+          type: string
+          description: Причина неудачи (только для failed)
+    LatestRate:
+      type: object
+      properties:
+        pair:
+          type: string
+          example: EUR/MXN
+        price:
+          type: number
+        updated_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
